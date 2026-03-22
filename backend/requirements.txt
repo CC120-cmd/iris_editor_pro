@@ -1,0 +1,10 @@
+flask
+flask-cors
+opencv-python-headless
+numpy==1.26.4
+insightface
+onnxruntime
+gfpgan
+torch==2.0.1
+torchvision==0.15.2
+gunicorn
