@@ -4,6 +4,6 @@ opencv-python-headless
 numpy==1.26.4
 insightface
 onnxruntime
-gfpgan
 torch
 torchvision
+gunicorn
