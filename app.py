@@ -15,16 +15,12 @@ CORS(app)
 print("Starting Face Swap API...")
 
 # =========================
-# LOAD MODELS (LOCAL FILES ONLY)
+# LOAD MODELS (AUTO DOWNLOAD)
 # =========================
-# IMPORTANT:
-# - Place inswapper_128.onnx in /backend
-# - Place insightface models in /backend/models
+face_app = FaceAnalysis(name='buffalo_l')
+face_app.prepare(ctx_id=-1, det_size=(256, 256))  # lower = less RAM
 
-face_app = FaceAnalysis(name='buffalo_l', root='./models')
-face_app.prepare(ctx_id=-1, det_size=(256, 256))  # smaller = less RAM
-
-swapper = get_model('inswapper_128.onnx', download=False)
+swapper = get_model('inswapper_128.onnx', download=True)
 
 print("Models loaded successfully!")
 
