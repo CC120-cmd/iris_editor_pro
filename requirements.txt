@@ -1,9 +1,9 @@
 flask
 flask-cors
-opencv-python-headless
-numpy==1.26.4
-insightface
-onnxruntime
-torch
-torchvision
 gunicorn
+numpy==1.26.4
+pillow
+opencv-python-headless
+onnxruntime
+insightface
+torch==2.0.1
