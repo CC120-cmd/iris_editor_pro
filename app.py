@@ -1,4 +1,6 @@
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import cv2
@@ -10,15 +12,19 @@ from io import BytesIO
 app = Flask(__name__)
 CORS(app)
 
-print("Starting Face Swap API (Render mode)...")
+print("Starting Face Swap API...")
 
 # =========================
-# LOAD MODELS (CPU SAFE)
+# LOAD MODELS (LOCAL FILES ONLY)
 # =========================
-face_app = FaceAnalysis(name='buffalo_l')
-face_app.prepare(ctx_id=-1, det_size=(320, 320))
+# IMPORTANT:
+# - Place inswapper_128.onnx in /backend
+# - Place insightface models in /backend/models
 
-swapper = get_model('inswapper_128.onnx', download=True)
+face_app = FaceAnalysis(name='buffalo_l', root='./models')
+face_app.prepare(ctx_id=-1, det_size=(256, 256))  # smaller = less RAM
+
+swapper = get_model('inswapper_128.onnx', download=False)
 
 print("Models loaded successfully!")
 
@@ -44,33 +50,56 @@ def home():
 @app.route('/swap', methods=['POST'])
 def swap_faces():
     try:
+        # Validate input
         if 'source' not in request.files or 'target' not in request.files:
             return jsonify({"error": "Missing images"}), 400
 
+        # Read images
         src_file = request.files['source']
         tgt_file = request.files['target']
 
-        src_img = cv2.imdecode(np.frombuffer(src_file.read(), np.uint8), cv2.IMREAD_COLOR)
-        tgt_img = cv2.imdecode(np.frombuffer(tgt_file.read(), np.uint8), cv2.IMREAD_COLOR)
+        src_img = cv2.imdecode(
+            np.frombuffer(src_file.read(), np.uint8),
+            cv2.IMREAD_COLOR
+        )
 
+        tgt_img = cv2.imdecode(
+            np.frombuffer(tgt_file.read(), np.uint8),
+            cv2.IMREAD_COLOR
+        )
+
+        if src_img is None or tgt_img is None:
+            return jsonify({"error": "Invalid image format"}), 400
+
+        # Resize for performance
         src_img = resize_if_large(src_img)
         tgt_img = resize_if_large(tgt_img)
 
+        # Detect faces
         src_faces = face_app.get(src_img)
         tgt_faces = face_app.get(tgt_img)
 
         if not src_faces or not tgt_faces:
             return jsonify({"error": "No face detected"}), 400
 
-        swapped = swapper.get(tgt_img, tgt_faces[0], src_faces[0], paste_back=True)
+        # Perform face swap
+        result = swapper.get(
+            tgt_img,
+            tgt_faces[0],
+            src_faces[0],
+            paste_back=True
+        )
 
-        _, buffer = cv2.imencode('.jpg', swapped)
-        return send_file(BytesIO(buffer), mimetype='image/jpeg')
+        # Encode result
+        success, buffer = cv2.imencode('.jpg', result)
+        if not success:
+            return jsonify({"error": "Image encoding failed"}), 500
+
+        return send_file(
+            BytesIO(buffer.tobytes()),
+            mimetype='image/jpeg'
+        )
 
     except Exception as e:
         print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
