@@ -2,9 +2,7 @@ services:
   - type: web
     name: face-swap-api
     env: python
+    runtime: python-3.10.13
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.10
