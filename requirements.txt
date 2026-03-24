@@ -5,5 +5,4 @@ numpy==1.26.4
 pillow
 opencv-python-headless
 onnxruntime
-insightface
-torch==2.0.1
+insightface==0.7.3
