@@ -52,7 +52,7 @@ def swap_faces():
         if face_app is None:
             print("Loading face model...")
             face_app = FaceAnalysis(name='buffalo_l')
-            face_app.prepare(ctx_id=-1, det_size=(320, 320))  # balanced speed/accuracy
+            face_app.prepare(ctx_id=-1, det_size=(320, 320))
 
         if swapper is None:
             print("Loading swapper model...")
@@ -127,13 +127,16 @@ def swap_faces():
             return jsonify({"error": "Image encoding failed"}), 500
 
         # =========================
-        # RETURN IMAGE (FIXED)
+        # RETURN IMAGE (FINAL FIX)
         # =========================
+        data = buffer.tobytes()
+
         return Response(
-            buffer.tobytes(),
+            data,
             mimetype='image/jpeg',
             headers={
-                "Content-Disposition": "inline; filename=swap.jpg"
+                "Content-Disposition": "inline; filename=swap.jpg",
+                "Content-Length": str(len(data))
             }
         )
 
