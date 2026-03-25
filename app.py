@@ -1,14 +1,12 @@
 import os
-import shutil
 os.environ["OMP_NUM_THREADS"] = "1"
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
 from insightface.model_zoo import get_model
-from io import BytesIO
 
 app = Flask(__name__)
 CORS(app)
@@ -16,7 +14,7 @@ CORS(app)
 print("Starting Face Swap API...")
 
 # =========================
-# LAZY LOAD MODELS
+# GLOBAL MODELS (LAZY LOAD)
 # =========================
 face_app = None
 swapper = None
@@ -34,42 +32,44 @@ def resize_if_large(img, max_size=640):
     return cv2.resize(img, (int(w * scale), int(h * scale)))
 
 # =========================
-# ROUTES
+# HOME ROUTE
 # =========================
 @app.route('/')
 def home():
     return "Face Swap API is running!"
 
+# =========================
+# SWAP ROUTE
+# =========================
 @app.route('/swap', methods=['POST'])
 def swap_faces():
     global face_app, swapper
 
     try:
-        # 🔥 LOAD MODELS ONLY WHEN NEEDED
+        # =========================
+        # LOAD MODELS ONCE
+        # =========================
         if face_app is None:
             print("Loading face model...")
-
-            # 🔥 FIX: remove corrupted model if exists
-            model_path = "/root/.insightface"
-            if os.path.exists(model_path):
-                print("Removing corrupted model...")
-                shutil.rmtree(model_path)
-
             face_app = FaceAnalysis(name='buffalo_l')
-            face_app.prepare(ctx_id=-1, det_size=(128, 128))
+            face_app.prepare(ctx_id=-1, det_size=(320, 320))  # balanced speed/accuracy
 
         if swapper is None:
             print("Loading swapper model...")
             swapper = get_model('inswapper_128.onnx', download=True)
 
-        # Validate input
+        # =========================
+        # VALIDATE INPUT
+        # =========================
         if 'source' not in request.files or 'target' not in request.files:
             return jsonify({"error": "Missing images"}), 400
 
-        # Read images
         src_file = request.files['source']
         tgt_file = request.files['target']
 
+        # =========================
+        # READ IMAGES
+        # =========================
         src_img = cv2.imdecode(
             np.frombuffer(src_file.read(), np.uint8),
             cv2.IMREAD_COLOR
@@ -83,18 +83,26 @@ def swap_faces():
         if src_img is None or tgt_img is None:
             return jsonify({"error": "Invalid image format"}), 400
 
-        # Resize for performance
+        # =========================
+        # RESIZE
+        # =========================
         src_img = resize_if_large(src_img)
         tgt_img = resize_if_large(tgt_img)
 
-        # Detect faces
+        # =========================
+        # DETECT FACES
+        # =========================
         src_faces = face_app.get(src_img)
         tgt_faces = face_app.get(tgt_img)
 
-        if not src_faces or not tgt_faces:
-            return jsonify({"error": "No face detected"}), 400
+        if not src_faces:
+            return jsonify({"error": "No face in source image"}), 400
+        if not tgt_faces:
+            return jsonify({"error": "No face in target image"}), 400
 
-        # Perform face swap
+        # =========================
+        # FACE SWAP
+        # =========================
         result = swapper.get(
             tgt_img,
             tgt_faces[0],
@@ -102,16 +110,40 @@ def swap_faces():
             paste_back=True
         )
 
-        # Encode result
+        if result is None:
+            return jsonify({"error": "Face swap failed"}), 500
+
+        # =========================
+        # FIX IMAGE FORMAT
+        # =========================
+        result = np.clip(result, 0, 255).astype(np.uint8)
+
+        # =========================
+        # ENCODE IMAGE
+        # =========================
         success, buffer = cv2.imencode('.jpg', result)
+
         if not success:
             return jsonify({"error": "Image encoding failed"}), 500
 
-        return send_file(
-            BytesIO(buffer.tobytes()),
-            mimetype='image/jpeg'
+        # =========================
+        # RETURN IMAGE (FIXED)
+        # =========================
+        return Response(
+            buffer.tobytes(),
+            mimetype='image/jpeg',
+            headers={
+                "Content-Disposition": "inline; filename=swap.jpg"
+            }
         )
 
     except Exception as e:
         print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# RUN APP
+# =========================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
