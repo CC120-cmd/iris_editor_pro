@@ -15,14 +15,10 @@ CORS(app)
 print("Starting Face Swap API...")
 
 # =========================
-# LOAD MODELS (AUTO DOWNLOAD)
+# LAZY LOAD MODELS
 # =========================
-face_app = FaceAnalysis(name='buffalo_l')
-face_app.prepare(ctx_id=-1, det_size=(256, 256))  # lower = less RAM
-
-swapper = get_model('inswapper_128.onnx', download=True)
-
-print("Models loaded successfully!")
+face_app = None
+swapper = None
 
 # =========================
 # RESIZE FOR PERFORMANCE
@@ -45,7 +41,19 @@ def home():
 
 @app.route('/swap', methods=['POST'])
 def swap_faces():
+    global face_app, swapper
+
     try:
+        # 🔥 LOAD MODELS ONLY WHEN NEEDED
+        if face_app is None:
+            print("Loading face model...")
+            face_app = FaceAnalysis(name='buffalo_l')
+            face_app.prepare(ctx_id=-1, det_size=(128, 128))
+
+        if swapper is None:
+            print("Loading swapper model...")
+            swapper = get_model('inswapper_128.onnx', download=True)
+
         # Validate input
         if 'source' not in request.files or 'target' not in request.files:
             return jsonify({"error": "Missing images"}), 400
