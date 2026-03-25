@@ -1,4 +1,5 @@
 import os
+import shutil
 os.environ["OMP_NUM_THREADS"] = "1"
 
 from flask import Flask, request, send_file, jsonify
@@ -47,6 +48,13 @@ def swap_faces():
         # 🔥 LOAD MODELS ONLY WHEN NEEDED
         if face_app is None:
             print("Loading face model...")
+
+            # 🔥 FIX: remove corrupted model if exists
+            model_path = "/root/.insightface"
+            if os.path.exists(model_path):
+                print("Removing corrupted model...")
+                shutil.rmtree(model_path)
+
             face_app = FaceAnalysis(name='buffalo_l')
             face_app.prepare(ctx_id=-1, det_size=(128, 128))
 

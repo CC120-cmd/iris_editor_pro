@@ -1,0 +1,1 @@
+{"error":"[ONNXRuntimeError] : 7 : INVALID_PROTOBUF : Load model from /root/.insightface/models/buffalo_l/1k3d68.onnx failed:Protobuf parsing failed."}
