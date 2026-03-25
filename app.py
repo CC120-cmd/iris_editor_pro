@@ -1,5 +1,11 @@
 import os
+
+# =========================
+# 🔥 LIMIT THREADS (CRITICAL FOR RENDER FREE)
+# =========================
 os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -14,12 +20,12 @@ CORS(app)
 print("Starting Face Swap API...")
 
 # =========================
-# 🔥 LOAD MODELS AT STARTUP (CRITICAL FIX)
+# 🔥 LOAD LIGHTWEIGHT MODEL (FREE PLAN SAFE)
 # =========================
 print("Loading models at startup...")
 
-face_app = FaceAnalysis(name='buffalo_l')
-face_app.prepare(ctx_id=-1, det_size=(320, 320))
+face_app = FaceAnalysis(name='buffalo_s')  # 🔥 lightweight model
+face_app.prepare(ctx_id=-1, det_size=(160, 160))  # 🔥 reduced size
 
 swapper = get_model('inswapper_128.onnx', download=True)
 
