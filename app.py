@@ -114,23 +114,42 @@ def swap_faces():
             return jsonify({"error": "Face swap failed"}), 500
 
         # =========================
-        # FIX IMAGE FORMAT
+        # 🔥 FIX RESULT IMAGE (CRITICAL)
         # =========================
-        result = np.clip(result, 0, 255).astype(np.uint8)
+        if result.dtype in [np.float32, np.float64]:
+            if result.max() <= 1.0:
+                result = (result * 255).clip(0, 255).astype(np.uint8)
+            else:
+                result = result.clip(0, 255).astype(np.uint8)
+
+        if result.dtype != np.uint8:
+            result = result.astype(np.uint8)
+
+        # Ensure 3 channels
+        if len(result.shape) == 2:
+            result = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR)
+
+        if result.shape[2] == 4:
+            result = cv2.cvtColor(result, cv2.COLOR_BGRA2BGR)
 
         # =========================
-        # ENCODE IMAGE
+        # ENCODE IMAGE (STABLE)
         # =========================
-        success, buffer = cv2.imencode('.jpg', result)
+        success, buffer = cv2.imencode(
+            '.jpg',
+            result,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 95]
+        )
 
         if not success:
             return jsonify({"error": "Image encoding failed"}), 500
 
-        # =========================
-        # RETURN IMAGE (FINAL FIX)
-        # =========================
         data = buffer.tobytes()
+        print("Encoded size:", len(data))  # 🔥 DEBUG
 
+        # =========================
+        # RETURN IMAGE
+        # =========================
         return Response(
             data,
             mimetype='image/jpeg',
