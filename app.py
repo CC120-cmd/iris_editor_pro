@@ -14,10 +14,16 @@ CORS(app)
 print("Starting Face Swap API...")
 
 # =========================
-# GLOBAL MODELS
+# 🔥 LOAD MODELS AT STARTUP (CRITICAL FIX)
 # =========================
-face_app = None
-swapper = None
+print("Loading models at startup...")
+
+face_app = FaceAnalysis(name='buffalo_l')
+face_app.prepare(ctx_id=-1, det_size=(320, 320))
+
+swapper = get_model('inswapper_128.onnx', download=True)
+
+print("Models loaded successfully")
 
 # =========================
 # RESIZE
@@ -41,24 +47,16 @@ def home():
 # =========================
 @app.route('/swap', methods=['POST'])
 def swap_faces():
-    global face_app, swapper
-
     try:
-        # LOAD MODELS ONCE
-        if face_app is None:
-            print("Loading face model...")
-            face_app = FaceAnalysis(name='buffalo_l')
-            face_app.prepare(ctx_id=-1, det_size=(320, 320))
-
-        if swapper is None:
-            print("Loading swapper model...")
-            swapper = get_model('inswapper_128.onnx', download=True)
-
+        # =========================
         # VALIDATE
+        # =========================
         if 'source' not in request.files or 'target' not in request.files:
             return jsonify({"error": "Missing images"}), 400
 
-        # READ
+        # =========================
+        # READ IMAGES
+        # =========================
         src_img = cv2.imdecode(
             np.frombuffer(request.files['source'].read(), np.uint8),
             cv2.IMREAD_COLOR
@@ -72,11 +70,15 @@ def swap_faces():
         if src_img is None or tgt_img is None:
             return jsonify({"error": "Invalid image"}), 400
 
+        # =========================
         # RESIZE
+        # =========================
         src_img = resize_if_large(src_img)
         tgt_img = resize_if_large(tgt_img)
 
-        # DETECT
+        # =========================
+        # DETECT FACES
+        # =========================
         src_faces = face_app.get(src_img)
         tgt_faces = face_app.get(tgt_img)
 
@@ -85,7 +87,9 @@ def swap_faces():
         if not tgt_faces:
             return jsonify({"error": "No face in target"}), 400
 
-        # SWAP
+        # =========================
+        # FACE SWAP
+        # =========================
         result = swapper.get(
             tgt_img,
             tgt_faces[0],
@@ -97,7 +101,7 @@ def swap_faces():
             return jsonify({"error": "Swap failed"}), 500
 
         # =========================
-        # 🔥 ROBUST FIX (CRITICAL)
+        # 🔥 ROBUST IMAGE FIX
         # =========================
         result = np.nan_to_num(result)
 
@@ -111,13 +115,13 @@ def swap_faces():
         if len(result.shape) == 2:
             result = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR)
 
-        if result.shape[2] == 4:
+        if len(result.shape) == 3 and result.shape[2] == 4:
             result = cv2.cvtColor(result, cv2.COLOR_BGRA2BGR)
 
         result = np.ascontiguousarray(result)
 
         # =========================
-        # ENCODE (SAFE)
+        # ENCODE (JPG FIRST)
         # =========================
         success, buffer = cv2.imencode(
             '.jpg',
@@ -125,21 +129,38 @@ def swap_faces():
             [int(cv2.IMWRITE_JPEG_QUALITY), 95]
         )
 
+        if success and buffer is not None:
+            data = buffer.tobytes()
+            print("JPG size:", len(data))
+
+            if len(data) > 5000:
+                return Response(
+                    data,
+                    mimetype='image/jpeg',
+                    headers={
+                        "Content-Disposition": "inline; filename=swap.jpg",
+                        "Content-Length": str(len(data))
+                    }
+                )
+
+        # =========================
+        # 🔥 FALLBACK TO PNG
+        # =========================
+        print("Falling back to PNG...")
+
+        success, buffer = cv2.imencode('.png', result)
+
         if not success or buffer is None:
             return jsonify({"error": "Encoding failed"}), 500
 
         data = buffer.tobytes()
-        print("Encoded size:", len(data))
+        print("PNG size:", len(data))
 
-        if len(data) < 5000:
-            return jsonify({"error": "Corrupted output"}), 500
-
-        # RETURN
         return Response(
             data,
-            mimetype='image/jpeg',
+            mimetype='image/png',
             headers={
-                "Content-Disposition": "inline; filename=swap.jpg",
+                "Content-Disposition": "inline; filename=swap.png",
                 "Content-Length": str(len(data))
             }
         )
